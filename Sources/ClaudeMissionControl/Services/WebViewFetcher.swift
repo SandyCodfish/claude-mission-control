@@ -28,6 +28,12 @@ final class WebViewFetcher: NSObject {
         // where the load fails with EMSGSIZE. Fresh store = clean load; we pay one CF challenge
         // per app launch in exchange.
         config.websiteDataStore = .nonPersistent()
+        // Disable QUIC/HTTP-3 via private SPI. Cloudflare advertises HTTP/3 in its HTTPS DNS
+        // records; when a VPN is active the resulting QUIC UDP datagrams exceed the tunnel MTU
+        // (POSIX EMSGSIZE, errno 40) and macOS does not fall back to TCP. Forcing the WebKit
+        // network process off QUIC makes every request use HTTP/2 over TCP, which VPN handles
+        // correctly. This key is private API — acceptable for non-App-Store distribution.
+        config.preferences.setValue(false, forKey: "_quicEnabled")
         self.webView = WKWebView(frame: .zero, configuration: config)
         super.init()
         self.webView.navigationDelegate = self
@@ -139,8 +145,20 @@ final class WebViewFetcher: NSObject {
     fileprivate func finishNavigation(error: Error?) {
         let cont = navigationContinuation
         navigationContinuation = nil
-        if let error { cont?.resume(throwing: error) }
-        else { cont?.resume() }
+        guard let error else { cont?.resume(); return }
+
+        // POSIX EMSGSIZE (errno 40): QUIC/HTTP-3 UDP datagrams exceed VPN tunnel MTU.
+        // macOS does not fall back to H2/TCP after a QUIC post-handshake failure, so the
+        // navigation dies with "message too long". Surface this as a specific error so the
+        // UI can tell the user to disconnect their VPN rather than showing a raw OS error.
+        let ns = error as NSError
+        if ns.domain == NSPOSIXErrorDomain && ns.code == 40 {
+            Self.log.error("warmUp failed: EMSGSIZE — VPN MTU too small for QUIC datagrams")
+            warmUpTask = nil  // allow retry after user toggles VPN
+            cont?.resume(throwing: APIError.vpnBlocked)
+        } else {
+            cont?.resume(throwing: error)
+        }
     }
 }
 

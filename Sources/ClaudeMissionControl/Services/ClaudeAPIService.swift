@@ -109,4 +109,5 @@ enum APIError: Error {
     case unauthorized          // triggers re-auth flow
     case httpError(Int)
     case parseError(Error)
+    case vpnBlocked            // QUIC/HTTP-3 datagram exceeds VPN tunnel MTU (EMSGSIZE)
 }

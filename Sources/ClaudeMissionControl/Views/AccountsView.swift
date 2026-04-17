@@ -108,7 +108,7 @@ struct AccountsView: View {
 
             VStack(alignment: .leading, spacing: 6) {
                 labeledField("Name", placeholder: "e.g. Work", text: $manualName)
-                labeledField("Session Token", placeholder: "sessionKeyLC cookie value", text: $manualToken)
+                labeledField("Session Token", placeholder: "sessionKey cookie value", text: $manualToken)
                 labeledField("Org UUID", placeholder: "lastActiveOrg cookie value", text: $manualOrgId)
             }
 
@@ -174,6 +174,8 @@ struct AccountsView: View {
                 } else if let lastError {
                     authError = "Imported \(added) of \(newSessions.count) profiles. \(lastError)"
                 }
+            } catch APIError.vpnBlocked {
+                authError = "VPN detected — QUIC datagrams exceed tunnel MTU. Disconnect VPN and retry."
             } catch {
                 authError = error.localizedDescription
             }
@@ -204,13 +206,16 @@ struct AccountsView: View {
         let name = manualName.isEmpty ? "Account \(accountStore.accounts.count + 1)" : manualName
         let orgId = manualOrgId.trimmingCharacters(in: .whitespacesAndNewlines)
         let token = manualToken.trimmingCharacters(in: .whitespacesAndNewlines)
-        let cookieHeader = "sessionKeyLC=\(token)"
+        let cookieHeader = "sessionKey=\(token)"
 
         // Preflight: verify before persisting so the user gets immediate feedback on bad credentials.
         do {
             _ = try await apiService.fetchUsage(for: UUID(), orgId: orgId, cookieHeader: cookieHeader)
         } catch APIError.unauthorized {
-            authError = "Unauthorized — session token may be stale. Copy a fresh sessionKeyLC from DevTools."
+            authError = "Unauthorized — session token may be stale. Copy a fresh sessionKey from DevTools."
+            return
+        } catch APIError.vpnBlocked {
+            authError = "VPN detected — QUIC datagrams exceed tunnel MTU. Disconnect VPN and retry."
             return
         } catch APIError.invalidURL {
             authError = "Invalid Org UUID — make sure you copied lastActiveOrg correctly."
@@ -234,11 +239,11 @@ struct AccountsView: View {
     private func updateToken(_ account: Account) {
         let alert = NSAlert()
         alert.messageText = "Update Session Token"
-        alert.informativeText = "Paste the sessionKeyLC cookie value from DevTools."
+        alert.informativeText = "Paste the sessionKey cookie value from DevTools."
         alert.addButton(withTitle: "Save")
         alert.addButton(withTitle: "Cancel")
         let field = NSTextField(frame: NSRect(x: 0, y: 0, width: 340, height: 24))
-        field.placeholderString = "sessionKeyLC cookie value"
+        field.placeholderString = "sessionKey cookie value"
         alert.accessoryView = field
         if alert.runModal() == .alertFirstButtonReturn {
             let token = field.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
