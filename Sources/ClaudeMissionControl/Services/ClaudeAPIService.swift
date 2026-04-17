@@ -49,7 +49,7 @@ final class ClaudeAPIService: Sendable {
             throw APIError.unauthorized
         }
         let fetcher = await WebViewFetcher.shared
-        await fetcher.installAuthCookies(sessionKey: sessionKey, lastActiveOrg: lastActiveOrg)
+        try await fetcher.installAuthCookies(sessionKey: sessionKey, lastActiveOrg: lastActiveOrg)
         return try await fetcher.fetchJSON(url: url)
     }
 
