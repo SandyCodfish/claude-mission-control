@@ -29,7 +29,7 @@ final class AccountStore: ObservableObject {
             return header
         }
         guard let token = try? keychain.getToken(for: account.id) else { return nil }
-        return "sessionKeyLC=\(token)"
+        return "sessionKey=\(token)"
     }
 
     func update(_ account: Account) {
